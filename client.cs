@@ -3,18 +3,17 @@ using System.Net;
 using System.Net.Sockets;
 using System.Collections.Generic;
 using System.Threading;
+using System.Text;
 
 namespace ChatServer
 {
     public class Client
     {
         public int id {get; set;}
-        public string name {get; set;}
-        public TcpClient client {get;set;}
+        public Socket client {get;set;}
 
-        public Client(int id, string name, TcpClient client){
+        public Client(int id, Socket client){
             this.id = id;
-            this.name = name;
             this.client = client;
 
             Thread clientThread = new Thread(receiveMessage);
@@ -23,21 +22,22 @@ namespace ChatServer
 
         private void receiveMessage() {
             // Buffer for reading data
-            Byte[] bytes = new Byte[256];
-            String message = null;
+            byte[] bytes = new Byte[256];
+            string message = null;
             try {
                 while(true){
-                    NetworkStream clientConnection = this.client.GetStream();
-                    int i;
-
-                    while((i = clientConnection.Read(bytes, 0, bytes.Length))!=0)
-                    {
-                        // Translate data bytes to a ASCII string.
-                        message = System.Text.Encoding.ASCII.GetString(bytes, 0, i);
-                        Program.broadcastToAll(this.id, "<User#" + this.id + "> " + message);
+                    while(true){                                                        //building the word from buffer
+                        int messageLength = client.Receive(bytes);
+                        message = Encoding.ASCII.GetString(bytes,0,messageLength);
+                        if(message.IndexOf("<EOF>") > -1){
+                            break;
+                        }
                     }
+                    message = message.Replace("<EOF>", "");                            //removing <EOF> sequence and printing the word
+                    message = "<User#" + this.id + "> " + message;
+                    Program.broadcastToAll(this.id, message);
                 }
-            } catch(Exception e){
+            } catch(Exception){
                 Program.broadcastToAll(-1, "User#" + this.id + " has disconnected !");
             }
         }

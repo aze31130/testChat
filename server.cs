@@ -10,29 +10,30 @@ namespace ChatServer
     public class Program
     {
         public static int SERVER_PORT = 12345;
-        public static string SERVER_IP = "127.0.0.1";
         public static List<Client> allClients;
 
         public static int Main(string[] arg)
         {
-            IPAddress localAddr = IPAddress.Parse(SERVER_IP);
-            
-            TcpListener server = new TcpListener(localAddr, SERVER_PORT);
-            server.Start();
+            //endpoint (ip + port)
+            IPHostEntry ipHostInfo = Dns.GetHostEntry("127.0.0.1");  
+            IPAddress ipAddress = ipHostInfo.AddressList[0];  
+            IPEndPoint localEndPoint = new IPEndPoint(ipAddress, SERVER_PORT); 
+
             allClients = new List<Client>(){};
-            Console.WriteLine("Server up and running !");
+            Socket server = new Socket(ipAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp); 
+            server.Bind(localEndPoint);
+            server.Listen(5);
 
             int counter = 0;
+            Console.WriteLine("Server up and running !");
+            while(true){
+                //instruction blocante
+                Socket client = server.Accept();
 
-            //Thread pool
-            while(true)
-            {
-                TcpClient IncomingClient = server.AcceptTcpClient();
-                
-                allClients.Add(new Client(counter, "Michel", IncomingClient));
+                allClients.Add(new Client(counter, client));
                 broadcastToAll(-1, "User#" + counter + " has connected !");
                 counter++;
-                //IncomingClient.Close();
+                
             }
         }
 
@@ -41,9 +42,8 @@ namespace ChatServer
             foreach (Client c in allClients)
             {
                 if((c.id != authorId) && (c.client.Connected)){
-                    byte[] msg = System.Text.Encoding.ASCII.GetBytes(message);
-                    NetworkStream ns = c.client.GetStream();
-                    ns.Write(msg, 0, msg.Length);
+                    byte[] msg = System.Text.Encoding.ASCII.GetBytes(message + "<EOF>");
+                    c.client.Send(msg);
                 }
             }
         }

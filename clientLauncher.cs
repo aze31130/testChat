@@ -12,43 +12,86 @@ namespace ChatClient
     {
         public static int SERVER_PORT = 12345;
         public static string SERVER_IP = "127.0.0.1";
-        public static NetworkStream connection;
+        public static Socket socket;
 
         public static int Main(string[] arg)
         {
-            TcpClient client = new TcpClient(SERVER_IP, SERVER_PORT);
-            connection = client.GetStream();
+            try {
+                socket = ConnectServer(SERVER_IP, SERVER_PORT);
 
-            Thread send = new Thread(SendMessage);
-            Thread receive = new Thread(ReceiveMessage);
+                
+                Thread send = new Thread(SendMessage);
+                Thread receive = new Thread(ReceiveMessage);
+                receive.Start();
+                send.Start();
+            } catch(Exception e){
+                Console.Error.WriteLine(e.ToString());
+            }
+            
 
-            send.Start();
-            receive.Start();
+
+            /*
+                client
+                essayer connecter sur une ip + port [fonction ConnectSocket / ConnectServer]
+                    ==> soit il y arrive OK
+                    ==> soit impossible ERROR
+
+
+                client arrive a se connecter
+                    ==> "ecouter les entrée utilisateurs" Console.ReadLine puis les envoyer [Thread1]
+                    ==> "ecouter le serveur" quand quelqu'un envoie un message, on veut le recevoir aussi [Thread2]
+
+
+            */
             return 0;
         }
 
-        private static void SendMessage(){
-            while(true){
-                string message = Console.ReadLine();
+        public static Socket ConnectServer(string ip, int port){
+            IPHostEntry host = Dns.GetHostEntry(ip);
 
-                Byte[] dataToSend = System.Text.Encoding.ASCII.GetBytes(message);
-                connection.Write(dataToSend, 0, dataToSend.Length);
+            //On essaye de trouver un endpoint
+            foreach(IPAddress ipa in host.AddressList){
+                IPEndPoint ipe = new IPEndPoint(ipa, port);
+
+                Socket potentialSocket = new Socket(ipe.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+                potentialSocket.Connect(ipe);
+
+                if(potentialSocket.Connected){
+                    return potentialSocket;
+                }
             }
+            return null;
         }
 
-        private static void ReceiveMessage(){
-            // Buffer for reading data
-            Byte[] bytes = new Byte[256];
-            String message = null;
-
+        private static void SendMessage(){
+            string message;
             while(true){
-                int i;
-                while((i = connection.Read(bytes, 0, bytes.Length))!=0)
-                {
-                    //Translate data bytes to a ASCII string.
-                    message = System.Text.Encoding.ASCII.GetString(bytes, 0, i);
+                message = Console.ReadLine();
+                Byte[] dataToSend = System.Text.Encoding.ASCII.GetBytes(message + "<EOF>");
+                socket.Send(dataToSend);
+            }
+        }
+        
+        private static void ReceiveMessage() {
+            // Buffer for reading data
+            byte[] bytes = new Byte[256];
+            string message = null;
+            try {
+                while(true){
+                    while(true){                                                      //building the word from buffer
+                        int messageLength = socket.Receive(bytes);
+                        message = Encoding.ASCII.GetString(bytes,0,messageLength);
+                        
+                        if(message.IndexOf("<EOF>") > -1){
+                            break;
+                        }
+                    }
+                    message = message.Replace("<EOF>", "");                            //removing <EOF> sequence and printing the word
                     Console.WriteLine(message);
+                    message = "";
                 }
+            } catch(Exception e){
+                Console.Error.WriteLine(e.ToString());
             }
         }
     }
